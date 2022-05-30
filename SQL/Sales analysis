@@ -1,1 +1,227 @@
+----------------------*1 часть*----------------------
+select t1.id_client as 'Клиент', 
+       sum(t2.Sum_payment)/12 as 'Средний чек за период', 
+	   count(*) as 'Количество всех операций по клиенту за период',
+	   sum(t2.Sum_payment)/count(*) as 'Средняя сумма покупок за месяц'
+       from QUERY_FOR_ABT_CUSTOMERINFO_0002$ t1
+       left join dbo.TRANSACTIONS$ t2 on t1.id_client = t2.id_client
+       where t1.id_client in (
+select id_client from (
+select id_client, date_new from dbo.TRANSACTIONS$
+       group by  ID_client, date_new)RES
+       group by id_client
+	   /*Данное условие выводит только тех клиентов, у которых кол-во дней в которые были совершенны транзакции больше 1 (непрерывная история за год)*/
+       having(count(*)) > 1
+       )
+       group by t1.id_client
 
+
+
+----------------------*2 часть*----------------------
+select t1.Month, 
+       t1.Summ as 'Cредняя сумма чека в месяц', 
+	   t1.Trans as 'Cреднее количество операций в месяц', 
+	   t2.Count_month as 'Cреднее количество клиентов',
+	   round(cast(t1.Trans as float) / (select count(*) from dbo.TRANSACTIONS$), 10) as 'Доля в месяц от общего количества операций за год',
+	   round(cast(t1.Summ as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$), 10) as 'Доля в месяц от общей суммы операций за год',
+	   t3.Gender_M as 'Соотношение муж. от общего кол-ва муж., %',
+	   t3.Gender_M_cost as 'Доля затрат муж. от общего кол-ва затрат муж.',
+	   t4.Gender_F as 'Соотношение жен. от общего кол-ва жен., %',
+	   t4.Gender_F_cost as 'Доля затрат жен. от общего кол-ва затрат жен.',
+	   t5.Gender_NA as 'Соотношение неизв. от общего кол-ва неизв., %',
+	   t5.Gender_NA_cost as 'Доля затрат неизв. от общего кол-ва затрат неизв.'
+from (
+select sum(t1.Sum_payment)/count(*) as 'Summ',
+       DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) as 'Month',
+	   count(*) as Trans 
+       from dbo.TRANSACTIONS$ t1
+       group by DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1)
+       ) t1
+left join (
+select DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) as 'Month', count(*) as 'Count_month' from (
+select ID_client, date_new from dbo.TRANSACTIONS$
+      group by  ID_client, date_new)RES
+      group by DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1)
+      ) t2 on t1.Month = t2.Month
+left join (
+      select DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) as 'Month', 
+     (100 * round(cast(count(t2.Gender) as float)/(select count(*) 
+	  from dbo.TRANSACTIONS$ t1 left join QUERY_FOR_ABT_CUSTOMERINFO_0002$ t2 
+      on t1.id_client = t2.id_client where t2.Gender = 'M'), 10)) as 'Gender_M',
+	  round(cast(sum(t1.Sum_payment) as float)/(select sum(t1.Sum_Payment) 
+	  from dbo.TRANSACTIONS$ t1 left join QUERY_FOR_ABT_CUSTOMERINFO_0002$ t2 
+      on t1.id_client = t2.id_client where t2.Gender = 'M'), 10) as 'Gender_M_cost'
+      from dbo.TRANSACTIONS$ t1
+      left join QUERY_FOR_ABT_CUSTOMERINFO_0002$ t2 on t1.id_client = t2.id_client
+      where t2.Gender = 'M'
+      group by DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1), t2.Gender) t3 
+      on t1.Month = t3.Month
+left join (
+      select DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) as 'Month', 
+     (100 * round(cast(count(t2.Gender) as float)/(select count(*) 
+	  from dbo.TRANSACTIONS$ t1 left join QUERY_FOR_ABT_CUSTOMERINFO_0002$ t2 
+      on t1.id_client = t2.id_client where t2.Gender = 'F'), 10)) as 'Gender_F',
+	  round(cast(sum(t1.Sum_payment) as float)/(select sum(t1.Sum_Payment) 
+	  from dbo.TRANSACTIONS$ t1 left join QUERY_FOR_ABT_CUSTOMERINFO_0002$ t2 
+      on t1.id_client = t2.id_client where t2.Gender = 'F'), 10) as 'Gender_F_cost'
+      from dbo.TRANSACTIONS$ t1
+      left join QUERY_FOR_ABT_CUSTOMERINFO_0002$ t2 on t1.id_client = t2.id_client
+      where t2.Gender = 'F'
+      group by DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1), t2.Gender) t4
+	  on t1.Month = t4.Month
+left join ( 
+      select DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) as 'Month', 
+      (100 * round(cast(count(t2.Gender) as float)/(select count(*) 
+	  from dbo.TRANSACTIONS$ t1 left join QUERY_FOR_ABT_CUSTOMERINFO_0002$ t2 
+      on t1.id_client = t2.id_client where t2.Gender = ''), 10)) as 'Gender_NA',
+	  round(cast(sum(t1.Sum_payment) as float)/(select sum(t1.Sum_Payment) 
+	  from dbo.TRANSACTIONS$ t1 left join QUERY_FOR_ABT_CUSTOMERINFO_0002$ t2 
+      on t1.id_client = t2.id_client where t2.Gender = ''), 10) as 'Gender_NA_cost'
+      from dbo.TRANSACTIONS$ t1
+      left join QUERY_FOR_ABT_CUSTOMERINFO_0002$ t2 on t1.id_client = t2.id_client
+      where t2.Gender = ''
+      group by DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1), t2.Gender) t5
+	  on t1.Month = t5.Month
+order by t1.Month
+
+
+
+----------------------*3 часть*----------------------
+
+----------Весь период----------
+select t1.Group_Age as 'Группа клиентов по возрасту',
+       t1.Sum_payment_all as 'Сумма операций за весь период',
+	   t1.Count_of_trans_all as 'Кол-во транзакций за весь период',
+	   t1.Sum_payment_pr as 'Сумма операций за весь период, %',
+	   t1.Count_of_trans_pr as 'Кол-во транзакций за весь период, %',
+	   t1.Average_sum_paym as 'Средний показатель суммы операций за весь период',
+	   t1.Average_count_trans 'Средний показатель кол-ва транзакций за весь период',
+
+----------2ой квартал 2015----------
+	   t2.Sum_payment_2q_15 as 'Сумма операций за 2 квартал 2015',
+	   t2.Count_of_trans_2q_15 as 'Кол-во транзакций за 2 квартал 2015',
+	   t2.Sum_payment_2q_15_pr as 'Сумма операций за 2 квартал 2015 относ. всей суммы за квартал, %',
+	   t2.Count_of_trans_2q_15_pr as 'Кол-во транзакций за 2 квартал 2015 относ. всех транз. за квартал, %',
+	   t2.Average_sum_paym_2q_15 as 'Средний показатель суммы операций за 2 квартал 2015',
+	   t2.Average_count_trans_2q_15 as 'Средний показатель кол-ва транзакций за 2 квартал 2015',
+
+----------3ой квартал 2015----------
+	   t3.Sum_payment_3q_15 as 'Сумма операций за 3 квартал 2015',
+	   t3.Count_of_trans_3q_15 as 'Кол-во транзакций за 3 квартал 2015',
+	   t3.Sum_payment_3q_15_pr as 'Сумма операций за 3 квартал 2015 относ. всей суммы за квартал, %',
+	   t3.Count_of_trans_3q_15_pr as 'Кол-во транзакций за 3 квартал 2015 относ. всех транз. за квартал, %',
+	   t3.Average_sum_paym_3q_15 as 'Средний показатель суммы операций за 3 квартал 2015',
+	   t3.Average_count_trans_3q_15 as 'Средний показатель кол-ва транзакций за 3 квартал 2015',
+
+----------4ый квартал 2015----------
+	   t4.Sum_payment_4q_15 as 'Сумма операций за 4 квартал 2015',
+	   t4.Count_of_trans_4q_15 as 'Кол-во транзакций за 4 квартал 2015',
+	   t4.Sum_payment_4q_15_pr as 'Сумма операций за 4 квартал 2015 относ. всей суммы за квартал, %',
+	   t4.Count_of_trans_4q_15_pr as 'Кол-во транзакций за 4 квартал 2015 относ. всех транз. за квартал, %',
+	   t4.Average_sum_paym_4q_15 as 'Средний показатель суммы операций за 4 квартал 2015',
+	   t4.Average_count_trans_4q_15 as 'Средний показатель кол-ва транзакций за 4 квартал 2015',
+
+----------1ый квартал 2016----------
+	   t5.Sum_payment_1q_16 as 'Сумма операций за 1 квартал 2016',
+	   t5.Count_of_trans_1q_16 as 'Кол-во транзакций за 1 квартал 2016',
+	   t5.Sum_payment_1q_16_pr as 'Сумма операций за 1 квартал 2016 относ. всей суммы за квартал, %',
+	   t5.Count_of_trans_1q_16_pr as 'Кол-во транзакций за 1 квартал 2016 относ. всех транз. за квартал, %',
+	   t5.Average_sum_paym_1q_16 as 'Средний показатель суммы операций за 1 квартал 2016',
+	   t5.Average_count_trans_1q_16 as 'Средний показатель кол-ва транзакций за 1 квартал 2016',
+
+----------2ой квартал 2016----------
+	   t6.Sum_payment_2q_16 as 'Сумма операций за 2 квартал 2016',
+	   t6.Count_of_trans_2q_16 as 'Кол-во транзакций за 2 квартал 2016',
+	   t6.Sum_payment_2q_16_pr as 'Сумма операций за 2 квартал 2016 относ. всей суммы за квартал, %',
+	   t6.Count_of_trans_2q_16_pr as 'Кол-во транзакций за 2 квартал 2016 относ. всех транз. за квартал, %',
+	   t6.Average_sum_paym_2q_16 as 'Средний показатель суммы операций за 2 квартал 2016',
+	   t6.Average_count_trans_2q_16 as 'Средний показатель кол-ва транзакций за 2 квартал 2016'
+from (
+       select 
+	   case when floor(Age/10 + 1)*10 is Null then 0 else floor(Age/10 + 1)*10 end as 'Group_Age',
+       sum(Sum_payment) as 'Sum_payment_all',
+	   count(*) as 'Count_of_trans_all',
+	   round((100 * cast(count(*) as float) / (select count(*) from dbo.TRANSACTIONS$)),10) as 'Count_of_trans_pr',
+	   round((100 * cast(sum(Sum_payment) as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$)),10) as 'Sum_payment_pr',
+	   round(cast(count(*) as float) / (select count(*) from dbo.TRANSACTIONS$),10) as 'Average_count_trans',
+	   round(cast(sum(Sum_payment) as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$),10) as 'Average_sum_paym'
+       from QUERY_FOR_ABT_CUSTOMERINFO_0002$ t1
+       left join dbo.TRANSACTIONS$ t2 on t1.id_client = t2.id_client
+       group by floor(t1.Age/10 + 1)*10
+	   ) t1
+left join (
+       select
+	   case when floor(Age/10 + 1)*10 is Null then 0 else floor(Age/10 + 1)*10 end as 'Group_Age',
+       sum(Sum_payment) as 'Sum_payment_2q_15',
+	   count(*) as 'Count_of_trans_2q_15',
+	   round((100 * cast(count(*) as float) / (select count(*) from dbo.TRANSACTIONS$)),10) as 'Count_of_trans_2q_15_pr',
+       round((100 * cast(sum(Sum_payment) as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$)),10) as 'Sum_payment_2q_15_pr',
+	   round(cast(count(*) as float) / (select count(*) from dbo.TRANSACTIONS$ where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2016-04-01' and '2016-06-01'),10) as 'Average_count_trans_2q_15',
+	   round(cast(sum(Sum_payment) as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$ where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2016-04-01' and '2016-06-01'),10) as 'Average_sum_paym_2q_15'
+       from QUERY_FOR_ABT_CUSTOMERINFO_0002$ t1
+       left join dbo.TRANSACTIONS$ t2 on t1.id_client = t2.id_client
+       where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2015-04-01' and '2015-06-01'
+       group by floor(t1.Age/10 + 1)*10
+	   ) t2
+       on t1.Group_Age = t2.Group_Age
+left join (
+       select
+	   case when floor(Age/10 + 1)*10 is Null then 0 else floor(Age/10 + 1)*10 end as 'Group_Age',
+	   sum(Sum_payment) as 'Sum_payment_3q_15',
+	   count(*) as 'Count_of_trans_3q_15',
+	   round((100 * cast(count(*) as float) / (select count(*) from dbo.TRANSACTIONS$)),10) as 'Count_of_trans_3q_15_pr',
+	   round((100 * cast(sum(Sum_payment) as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$)),10) as 'Sum_payment_3q_15_pr',
+	   round(cast(count(*) as float) / (select count(*) from dbo.TRANSACTIONS$ where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2015-07-01' and '2015-09-01'),10) as 'Average_count_trans_3q_15',
+	   round(cast(sum(Sum_payment) as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$ where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2015-07-01' and '2015-09-01'),10) as 'Average_sum_paym_3q_15'
+	   from QUERY_FOR_ABT_CUSTOMERINFO_0002$ t1
+	   left join dbo.TRANSACTIONS$ t2 on t1.id_client = t2.id_client
+	   where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2015-07-01' and '2015-09-01'
+	   group by floor(t1.Age/10 + 1)*10
+	   ) t3
+	   on t1.Group_Age = t3.Group_Age
+left join (
+       select 
+	   case when floor(Age/10 + 1)*10 is Null then 0 else floor(Age/10 + 1)*10 end as 'Group_Age',
+	   sum(Sum_payment) as 'Sum_payment_4q_15',
+	   count(*) as 'Count_of_trans_4q_15',
+	   round((100 * cast(count(*) as float) / (select count(*) from dbo.TRANSACTIONS$)),10) as 'Count_of_trans_4q_15_pr',
+	   round((100 * cast(sum(Sum_payment) as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$)),10) as 'Sum_payment_4q_15_pr',
+	   round(cast(count(*) as float) / (select count(*) from dbo.TRANSACTIONS$ where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2015-10-01' and '2015-12-01'),10) as 'Average_count_trans_4q_15',
+	   round(cast(sum(Sum_payment) as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$ where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2015-10-01' and '2015-12-01'),10) as 'Average_sum_paym_4q_15'
+	   from QUERY_FOR_ABT_CUSTOMERINFO_0002$ t1
+	   left join dbo.TRANSACTIONS$ t2 on t1.id_client = t2.id_client
+	   where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2015-10-01' and '2015-12-01'
+	   group by floor(t1.Age/10 + 1)*10
+	   ) t4
+	   on t1.Group_Age = t4.Group_Age
+left join (
+       select
+	   case when floor(Age/10 + 1)*10 is Null then 0 else floor(Age/10 + 1)*10 end as 'Group_Age',
+	   sum(Sum_payment) as 'Sum_payment_1q_16',
+	   count(*) as 'Count_of_trans_1q_16',
+	   round((100 * cast(count(*) as float) / (select count(*) from dbo.TRANSACTIONS$)),10) as 'Count_of_trans_1q_16_pr',
+	   round((100 * cast(sum(Sum_payment) as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$)),10) as 'Sum_payment_1q_16_pr',
+	   round(cast(count(*) as float) / (select count(*) from dbo.TRANSACTIONS$ where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2016-01-01' and '2016-03-01'),10) as 'Average_count_trans_1q_16',
+	   round(cast(sum(Sum_payment) as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$ where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2016-01-01' and '2016-03-01'),10) as 'Average_sum_paym_1q_16'
+	   from QUERY_FOR_ABT_CUSTOMERINFO_0002$ t1
+	   left join dbo.TRANSACTIONS$ t2 on t1.id_client = t2.id_client
+	   where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2016-01-01' and '2016-03-01'
+	   group by floor(t1.Age/10 + 1)*10
+	   ) t5
+	   on t1.Group_Age = t5.Group_Age
+left join (
+       select
+	   case when floor(Age/10 + 1)*10 is Null then 0 else floor(Age/10 + 1)*10 end as 'Group_Age',
+	   sum(Sum_payment) as 'Sum_payment_2q_16',
+	   count(*) as 'Count_of_trans_2q_16',
+	   round((100 * cast(count(*) as float) / (select count(*) from dbo.TRANSACTIONS$)),10) as 'Count_of_trans_2q_16_pr',
+	   round((100 * cast(sum(Sum_payment) as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$)),10) as 'Sum_payment_2q_16_pr',
+	   round(cast(count(*) as float) / (select count(*) from dbo.TRANSACTIONS$ where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2016-04-01' and '2016-06-01'),10) as 'Average_count_trans_2q_16',
+	   round(cast(sum(Sum_payment) as float) / (select sum(Sum_payment) from dbo.TRANSACTIONS$ where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2016-04-01' and '2016-06-01'),10) as 'Average_sum_paym_2q_16'
+	   from QUERY_FOR_ABT_CUSTOMERINFO_0002$ t1
+	   left join dbo.TRANSACTIONS$ t2 on t1.id_client = t2.id_client
+	   where DATEFROMPARTS(YEAR(date_new), MONTH(date_new), 1) between '2016-04-01' and '2016-06-01'
+	   group by floor(t1.Age/10 + 1)*10
+	   ) t6
+	   on t1.Group_Age = t6.Group_Age
+	   order by t1.Group_Age
